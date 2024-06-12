@@ -1,6 +1,7 @@
-import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import React, { useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useFocusEffect } from "@react-navigation/native";
 
 interface Movie {
   title: string;
@@ -9,30 +10,35 @@ interface Movie {
   ratings: number;
 }
 
-// Assuming movie data is available in the following format
-const movies: Movie[] = [
-  {
-    title: "Inception",
-    director: "Christopher Nolan",
-    year: 2010,
-    ratings: 8.8,
-  },
-  {
-    title: "The Dark Knight",
-    director: "Christopher Nolan",
-    year: 2008,
-    ratings: 9.0,
-  },
-
-  // Add more movie data as needed
-];
-
 const HomeScreen: React.FC = () => {
+  const [movies, setMovies] = useState<Movie[]>([]);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMovies();
+      console.log("tset");
+    }, [])
+  );
+
+  const fetchMovies = async () => {
+    try {
+      const response = await fetch("http://192.168.100.5:3000/api/movies");
+      if (!response.ok) {
+        throw new Error("Failed to fetch movies");
+      }
+      const data = await response.json();
+      setMovies(data.movies);
+    } catch (error) {
+      console.error("Error fetching movies:", error);
+    }
+  };
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {movies.map((movie, index) => (
-        <MovieCard key={index} movie={movie} />
-      ))}
+      <Text style={styles.labelMovie}>List of Movies:</Text>
+      {movies.length === 0 ? (
+        <Text style={styles.labelMovie}>No Movies Found</Text>
+      ) : (
+        movies.map((movie, index) => <MovieCard key={index} movie={movie} />)
+      )}
     </ScrollView>
   );
 };
@@ -58,14 +64,20 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
   },
+  labelMovie: {
+    fontWeight: "bold",
+    fontSize: 20,
+    textAlign: "center",
+    marginVertical: 20,
+  },
   card: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 5,
     padding: 10,
     marginVertical: 10,
-    width: "90%", // 90% width of the screen
-    maxWidth: 400, // Maximum width of 400 units
+    width: "90%",
+    maxWidth: 400,
   },
 });
 

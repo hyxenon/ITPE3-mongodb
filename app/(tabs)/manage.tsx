@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   ScrollView,
@@ -10,7 +10,7 @@ import {
 import { ThemedText } from "@/components/ThemedText";
 
 interface Movie {
-  id: number;
+  _id: string;
   title: string;
   director: string;
   year: number;
@@ -20,7 +20,7 @@ interface Movie {
 const TabTwoScreen: React.FC = () => {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [newMovie, setNewMovie] = useState<Movie>({
-    id: 0,
+    _id: "",
     title: "",
     director: "",
     year: 0,
@@ -28,40 +28,126 @@ const TabTwoScreen: React.FC = () => {
   });
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
   const [ratingError, setRatingError] = useState<string>("");
+  useEffect(() => {
+    fetchMovies();
+    console.log("test");
+  }, []);
+
+  const fetchMovies = async () => {
+    try {
+      const response = await fetch("http://192.168.100.5:3000/api/movies");
+      if (!response.ok) {
+        throw new Error("Failed to fetch movies");
+      }
+      const data = await response.json();
+      setMovies(data.movies);
+    } catch (error) {
+      console.error("Error fetching movies:", error);
+    }
+  };
 
   const addMovie = () => {
     if (!isValidMovie(newMovie)) {
-      return; // Don't add movie if it's not valid
+      return;
     }
     if (editingMovie) {
-      // Editing existing movie
       const updatedMovies = movies.map((movie) =>
-        movie.id === editingMovie.id ? { ...newMovie } : movie
+        movie._id === editingMovie._id ? { ...newMovie } : movie
       );
       setMovies(updatedMovies);
       setEditingMovie(null);
     } else {
       // Adding new movie
-      const updatedMovies = [...movies, { ...newMovie, id: movies.length + 1 }];
-      setMovies(updatedMovies);
+      fetch("http://192.168.100.5:3000/api/movies/add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newMovie),
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to add movie");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          const addedMovie = { ...newMovie, _id: data.movie._id };
+          const updatedMovies = [...movies, addedMovie];
+          setMovies(updatedMovies);
+          setNewMovie({
+            _id: "",
+            title: "",
+            director: "",
+            year: 0,
+            ratings: 0,
+          });
+          setRatingError("");
+        })
+        .catch((error) => {
+          console.error("Error adding movie:", error);
+        });
     }
-    setNewMovie({ id: 0, title: "", director: "", year: 0, ratings: 0 });
-    setRatingError("");
   };
 
-  const deleteMovie = (id: number) => {
-    const updatedMovies = movies.filter((movie) => movie.id !== id);
-    setMovies(updatedMovies);
+  const deleteMovie = (id: string) => {
+    const stringId = id.toString();
+    fetch(`http://192.168.100.5:3000/api/movies/delete/${stringId}`, {
+      method: "DELETE",
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to delete movie");
+        }
+
+        setMovies(movies.filter((movie) => movie._id !== stringId));
+      })
+      .catch((error) => {
+        console.error("Error deleting movie:", error);
+      });
   };
 
   const editMovie = (movie: Movie) => {
     setEditingMovie(movie);
-    setNewMovie(movie);
+
+    setNewMovie({ ...movie, _id: movie._id.toString() });
+  };
+
+  const saveChanges = () => {
+    if (!isValidMovie(newMovie)) {
+      return;
+    }
+    fetch(`http://192.168.100.5:3000/api/movies/edit/${newMovie._id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(newMovie),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to save changes: " + response.statusText);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log("Changes saved successfully:", data);
+        const updatedMovies = movies.map((movie) =>
+          movie._id === newMovie._id ? { ...newMovie } : movie
+        );
+        setMovies(updatedMovies);
+        setEditingMovie(null);
+        setNewMovie({ _id: "", title: "", director: "", year: 0, ratings: 0 });
+        setRatingError("");
+      })
+      .catch((error) => {
+        console.error("Error saving changes:", error);
+      });
   };
 
   const cancelEdit = () => {
     setEditingMovie(null);
-    setNewMovie({ id: 0, title: "", director: "", year: 0, ratings: 0 });
+    setNewMovie({ _id: "", title: "", director: "", year: 0, ratings: 0 });
     setRatingError("");
   };
 
@@ -122,20 +208,24 @@ const TabTwoScreen: React.FC = () => {
         <View style={styles.buttonContainer}>
           <Button
             title={editingMovie ? "Save Changes" : "Add Movie"}
-            onPress={addMovie}
+            onPress={editingMovie ? saveChanges : addMovie}
             disabled={!isValidMovie(newMovie) || !!ratingError}
           />
           {editingMovie && <Button title="Cancel" onPress={cancelEdit} />}
         </View>
       </View>
-      {movies.map((movie) => (
-        <MovieCard
-          key={movie.id}
-          movie={movie}
-          onDelete={deleteMovie}
-          onEdit={editMovie}
-        />
-      ))}
+      {movies.length === 0 ? (
+        <Text>No movies found</Text>
+      ) : (
+        movies.map((movie) => (
+          <MovieCard
+            key={movie._id}
+            movie={movie}
+            onDelete={deleteMovie}
+            onEdit={editMovie}
+          />
+        ))
+      )}
     </ScrollView>
   );
 };
@@ -152,7 +242,7 @@ const isValidMovie = (movie: Movie) => {
 
 interface MovieCardProps {
   movie: Movie;
-  onDelete: (id: number) => void;
+  onDelete: (id: string) => void;
   onEdit: (movie: Movie) => void;
 }
 
@@ -167,7 +257,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onDelete, onEdit }) => {
       <ThemedText style={styles.movieText}>Ratings: {movie.ratings}</ThemedText>
       <View style={styles.buttonContainer}>
         <Button title="Edit" onPress={() => onEdit(movie)} />
-        <Button title="Delete" onPress={() => onDelete(movie.id)} />
+        <Button title="Delete" onPress={() => onDelete(movie._id)} />
       </View>
     </View>
   );
