@@ -15,6 +15,7 @@ interface Movie {
   director: string;
   year: number;
   ratings: number;
+  genre: string;
 }
 
 const TabTwoScreen: React.FC = () => {
@@ -25,9 +26,12 @@ const TabTwoScreen: React.FC = () => {
     director: "",
     year: 0,
     ratings: 0,
+    genre: "",
   });
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
   const [ratingError, setRatingError] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   useEffect(() => {
     fetchMovies();
     console.log("test");
@@ -35,7 +39,11 @@ const TabTwoScreen: React.FC = () => {
 
   const fetchMovies = async () => {
     try {
-      const response = await fetch("http://192.168.100.5:3000/api/movies");
+      let url = "http://192.168.100.5:3000/api/movies";
+      if (searchQuery.trim() !== "") {
+        url += `?search=${searchQuery}`;
+      }
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error("Failed to fetch movies");
       }
@@ -46,24 +54,67 @@ const TabTwoScreen: React.FC = () => {
     }
   };
 
+  const handleSearch = () => {
+    fetchMovies();
+  };
+
   const addMovie = () => {
     if (!isValidMovie(newMovie)) {
       return;
     }
     if (editingMovie) {
-      const updatedMovies = movies.map((movie) =>
-        movie._id === editingMovie._id ? { ...newMovie } : movie
-      );
-      setMovies(updatedMovies);
-      setEditingMovie(null);
+      const { title, director, year, ratings, genre } = newMovie;
+      const updatedMovie = {
+        title,
+        director,
+        year,
+        ratings,
+        genre,
+        _id: newMovie._id,
+      }; // Include _id for consistency
+      fetch(`http://192.168.100.5:3000/api/movies/edit/${newMovie._id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedMovie),
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to save changes: " + response.statusText);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          console.log("Changes saved successfully:", data);
+          const updatedMovies = movies.map((movie) =>
+            movie._id === newMovie._id ? { ...newMovie } : movie
+          );
+          setMovies(updatedMovies);
+          setEditingMovie(null);
+          setNewMovie({
+            _id: "",
+            title: "",
+            director: "",
+            year: 0,
+            ratings: 0,
+            genre: "",
+          });
+          setRatingError("");
+        })
+        .catch((error) => {
+          console.error("Error saving changes:", error);
+        });
     } else {
+      const { title, director, year, ratings, genre } = newMovie;
+      const movieToAdd = { title, director, year, ratings, genre };
       // Adding new movie
       fetch("http://192.168.100.5:3000/api/movies/add", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(newMovie),
+        body: JSON.stringify(movieToAdd),
       })
         .then((response) => {
           if (!response.ok) {
@@ -72,7 +123,7 @@ const TabTwoScreen: React.FC = () => {
           return response.json();
         })
         .then((data) => {
-          const addedMovie = { ...newMovie, _id: data.movie._id };
+          const addedMovie = { ...movieToAdd, _id: data.movie._id }; // Include _id for consistency
           const updatedMovies = [...movies, addedMovie];
           setMovies(updatedMovies);
           setNewMovie({
@@ -81,6 +132,7 @@ const TabTwoScreen: React.FC = () => {
             director: "",
             year: 0,
             ratings: 0,
+            genre: "",
           });
           setRatingError("");
         })
@@ -137,7 +189,14 @@ const TabTwoScreen: React.FC = () => {
         );
         setMovies(updatedMovies);
         setEditingMovie(null);
-        setNewMovie({ _id: "", title: "", director: "", year: 0, ratings: 0 });
+        setNewMovie({
+          _id: "",
+          title: "",
+          director: "",
+          year: 0,
+          ratings: 0,
+          genre: "",
+        });
         setRatingError("");
       })
       .catch((error) => {
@@ -147,7 +206,14 @@ const TabTwoScreen: React.FC = () => {
 
   const cancelEdit = () => {
     setEditingMovie(null);
-    setNewMovie({ _id: "", title: "", director: "", year: 0, ratings: 0 });
+    setNewMovie({
+      _id: "",
+      title: "",
+      director: "",
+      year: 0,
+      ratings: 0,
+      genre: "",
+    });
     setRatingError("");
   };
 
@@ -188,6 +254,13 @@ const TabTwoScreen: React.FC = () => {
         />
         <TextInput
           style={styles.input}
+          placeholder="Genre"
+          value={newMovie.genre}
+          onChangeText={(text) => setNewMovie({ ...newMovie, genre: text })}
+        />
+
+        <TextInput
+          style={styles.input}
           placeholder="Year"
           value={newMovie.year.toString()}
           onChangeText={(text) =>
@@ -213,6 +286,16 @@ const TabTwoScreen: React.FC = () => {
           />
           {editingMovie && <Button title="Cancel" onPress={cancelEdit} />}
         </View>
+      </View>
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search for movies..."
+          onSubmitEditing={handleSearch}
+        />
+        <Button title="Search" onPress={handleSearch} />
       </View>
       {movies.length === 0 ? (
         <Text>No movies found</Text>
@@ -253,6 +336,7 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onDelete, onEdit }) => {
       <ThemedText style={styles.movieText}>
         Director: {movie.director}
       </ThemedText>
+      <ThemedText style={styles.movieText}>Genre: {movie.genre}</ThemedText>
       <ThemedText style={styles.movieText}>Year: {movie.year}</ThemedText>
       <ThemedText style={styles.movieText}>Ratings: {movie.ratings}</ThemedText>
       <View style={styles.buttonContainer}>
@@ -303,6 +387,20 @@ const styles = StyleSheet.create({
   errorText: {
     color: "red",
     marginBottom: 5,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    borderColor: "gray",
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginRight: 10,
   },
 });
 

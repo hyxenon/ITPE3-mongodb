@@ -3,7 +3,14 @@ const Movie = require("../models/movie");
 // Get All Movies Data
 exports.getMovies = async (req, res, next) => {
   try {
-    const movies = await Movie.find();
+    let movies;
+    if (req.query.search) {
+      movies = await Movie.find({
+        title: { $regex: req.query.search, $options: "i" },
+      });
+    } else {
+      movies = await Movie.find();
+    }
     res.status(200).json({ movies: movies });
   } catch (error) {
     console.error("Error fetching movies:", error);
@@ -14,16 +21,14 @@ exports.getMovies = async (req, res, next) => {
 // Add one movie to the list of movies
 exports.addMovie = async (req, res, next) => {
   try {
-    const { title, director, year, ratings } = req.body;
-
-    // Create a new movie document
+    const { title, director, year, ratings, genre } = req.body; // Include genre
     const newMovie = await Movie.create({
       title: title,
       director: director,
       year: year,
       ratings: ratings,
+      genre: genre, // Include genre
     });
-
     res.status(201).json({ movie: newMovie });
   } catch (error) {
     console.error("Error adding movie:", error);
